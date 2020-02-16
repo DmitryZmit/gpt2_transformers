@@ -66,9 +66,10 @@ MODEL_CLASSES = {
 
 class TextDataset(Dataset):
     @staticmethod
-    def process_file(file_path, tokenizer, block_size, shuffle=True):
+    def process_file(file_path, tokenizer, block_size,args, shuffle=True):
         directory, filename = os.path.split(file_path)
         directory = os.path.join(directory, 'cached')
+        os.makedirs(directory, exist_ok=True)
         cached_features_file = os.path.join(directory, f'cached_lm_{block_size}_{len(tokenizer.vocab)}_{filename}')
         examples = []
         # add random shift
@@ -123,7 +124,7 @@ class TextDataset(Dataset):
 
         self.examples = []
         for fn in tqdm(files):
-            self.examples.extend(self.process_file(fn, tokenizer, block_size))
+            self.examples.extend(self.process_file(fn, tokenizer, block_size,args=args))
 
     def __len__(self):
         return len(self.examples)
