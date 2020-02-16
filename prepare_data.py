@@ -1,12 +1,9 @@
 
+import sys
+sys.path.append('/home/jovyan/ru_transformers/gpt_env/lib/python3.6/site-packages')
 import argparse
-import glob
-import logging
 import os
 import pickle
-import random
-import torch
-from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 from tqdm import tqdm, trange
 from multiprocessing import  Pool
 from multiprocessing import cpu_count
