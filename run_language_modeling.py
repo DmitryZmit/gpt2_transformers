@@ -45,7 +45,8 @@ from transformers import (
     GPT2LMHeadModel,
     PreTrainedModel,
     PreTrainedTokenizer,
-    get_linear_schedule_with_warmup,
+    WarmupCosineSchedule,
+    WarmupConstantSchedule
 )
 
 from tokenizer_gpt2 import GPT2VocabTokenizer
@@ -256,18 +257,19 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
         t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
     # Prepare optimizer and schedule (linear warmup and decay)
-    no_decay = ["bias", "LayerNorm.weight"]
+    no_decay = ['bias', 'LayerNorm.weight']
     optimizer_grouped_parameters = [
-        {
-            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
-            "weight_decay": args.weight_decay,
-        },
-        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
+        {'params': [p for n, p in model.named_parameters() if p.requires_grad and not any(nd in n for nd in no_decay)],
+         'weight_decay': args.weight_decay},
+        {'params': [p for n, p in model.named_parameters() if p.requires_grad and any(nd in n for nd in no_decay)],
+         'weight_decay': 0.0}
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    scheduler = get_linear_schedule_with_warmup(
-        optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
-    )
+    warmup_steps = args.warmup_samples // args.train_batch_size
+    if args.lr_decay:
+        scheduler = WarmupCosineSchedule(optimizer, warmup_steps=warmup_steps, t_total=t_total)
+    else:
+        scheduler = WarmupConstantSchedule(optimizer, warmup_steps=warmup_steps)
 
     # Check if saved optimizer or scheduler states exist
     if (
@@ -611,6 +613,11 @@ def main():
         "--fp16",
         action="store_true",
         help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit",
+    )
+    parser.add_argument(
+        "--lr_decay",
+        action="store_true",
+        help="decay lr ",
     )
     parser.add_argument(
         "--fp16_opt_level",
