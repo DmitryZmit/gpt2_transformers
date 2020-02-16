@@ -566,6 +566,10 @@ def main():
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
+    parser.add_argument("--warmup_samples", default=0, type=int,
+                        help="Linear warmup over warmup_samples.")
+    parser.add_argument("--lr_decay", action='store_true',
+                        help="Decay LR using WarmupLinearSchedule.")
     args = parser.parse_args()
 
     if args.model_type in ["bert", "roberta", "distilbert"] and not args.mlm:
