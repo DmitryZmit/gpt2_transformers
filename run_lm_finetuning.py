@@ -20,7 +20,7 @@ using a masked language modeling (MLM) loss.
 """
 
 import sys
-sys.path.append('/home/jovyan/repo/envs/gpt2_env/lib/python3.6/site-packages')
+sys.path.append('/home/jovyan/ru_transformers/gpt_env/lib/python3.6/site-packages')
 
 import argparse
 import glob
