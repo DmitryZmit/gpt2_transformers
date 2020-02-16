@@ -478,6 +478,10 @@ def main():
         type=str,
         help="Optional directory to store the pre-trained models downloaded from s3 (instread of the default one)",
     )
+
+    parser.add_argument(
+        "--from_scratch", action="store_true"
+    )
     parser.add_argument(
         "--block_size",
         default=1024,
