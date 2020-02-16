@@ -489,7 +489,7 @@ def main():
                         help="If > 0: set total number of training steps to perform. Override num_train_epochs.")
     parser.add_argument("--warmup_samples", default=0, type=int,
                         help="Linear warmup over warmup_samples.")
-    parser.add_argument("--max_file_load", default=1024, type=int)
+    parser.add_argument("--max_files_load", default=1024, type=int)
     parser.add_argument("--lr_decay", action='store_true',
                         help="Decay LR using WarmupLinearSchedule.")
 
