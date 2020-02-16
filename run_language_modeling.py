@@ -389,6 +389,9 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
                             tb_writer.add_scalar("eval_{}".format(key), value, global_step)
                     tb_writer.add_scalar("lr", scheduler.get_lr()[0], global_step)
                     tb_writer.add_scalar("loss", (tr_loss - logging_loss) / args.logging_steps, global_step)
+                    epoch_iterator.set_postfix(LR=f'{scheduler.get_lr()[0]:.7f}',
+                                               Loss=f'{(tr_loss - logging_loss) / args.logging_steps:.3f}',
+                                               Perplexity=f'{torch.exp(torch.tensor((tr_loss - logging_loss) / args.logging_steps)):.2f}')
                     logging_loss = tr_loss
 
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
