@@ -108,7 +108,7 @@ class TextDataset(Dataset):
         # can change this behavior by adding (model specific) padding.
         return examples
 
-    def __init__(self, tokenizer, file_path='train', args=None,max_file_load=20):
+    def __init__(self, tokenizer, file_path='train', args=None):
         if not hasattr(tokenizer, 'hash'): tokenizer.hash = ''
 
         logger.info(f"Loading features from {file_path}")
@@ -118,7 +118,7 @@ class TextDataset(Dataset):
             assert os.path.isdir(file_path)
             files = glob.glob(os.path.join(file_path, '*.txt'))
 
-
+        max_file_load=args.max_files_load
         files = sorted(files)
 
         if (args.local_rank == -1):
@@ -547,6 +547,11 @@ def main():
         default=-1,
         type=int,
         help="If > 0: set total number of training steps to perform. Override num_train_epochs.",
+    )
+    parser.add_argument(
+        "--max_files_load",
+        default=100,
+        type=int
     )
     parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
 
