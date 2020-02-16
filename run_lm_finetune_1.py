@@ -47,33 +47,79 @@ from dataclasses import dataclass
 # from fastprogress import progress_bar
 
 from tokenizer_gpt2 import GPT2VocabTokenizer
-
-
 from transformers import (WEIGHTS_NAME, AdamW, WarmupLinearSchedule, WarmupConstantSchedule, WarmupCosineSchedule,
-                          GPT2Config, GPT2LMHeadModel, GPT2Tokenizer)
+                          GPT2Config, GPT2LMHeadModel, GPT2Tokenizer,
+                          )
 
 
 logger = logging.getLogger(__name__)
 
 MODEL_CLASSES = {
-    'gpt2': (GPT2Config, GPT2LMHeadModel, GPT2VocabTokenizer),
+    'gpt2': (GPT2Config, GPT2LMHeadModel, GPT2Tokenizer),
 }
 
+
+@dataclass
+class MovingLoss():
+    steps: int = 1000
+    avg_loss = (0.0, 0.0)
+
+    def add(self, batch_loss: float):
+        k_s = 1 - 1 / self.steps
+        avg_loss = self.avg_loss
+        self.avg_loss = (self.avg_loss[0] * k_s + batch_loss * (1 - k_s),
+                         self.avg_loss[1] * k_s + 1.0 * (1 - k_s))
+
+    @property
+    def loss(self):
+        if self.avg_loss[1]:
+            return self.avg_loss[0] / self.avg_loss[1]
+
+
+def print_sample(model, tokenizer, device, args):
+    model.eval()
+    raw_text = """ На словах ты Лев Толстой,\n А на деле -"""
+    context_tokens = tokenizer.encode(raw_text)
+    out = sample_sequence(
+        model=model,
+        context=context_tokens,
+        length=500,
+        temperature=1,
+        top_k=0,
+        top_p=0.9,
+        device=device,
+        # is_xlnet=bool(args.model_type == "xlnet"),
+    )
+    out = out[0, len(context_tokens):].tolist()
+    text = raw_text + tokenizer.decode(out)
+    print(text)
+
+    with open(os.path.join(args.output_dir, 'sample.txt'), 'w') as f:
+        f.write(text)
+
+    model.train()
 
 
 class TextDataset(Dataset):
     @staticmethod
-    def process_file(file_path, tokenizer, block_size, shuffle=True):
+    def process_file(file_path, tokenizer, block_size, shuffle):
         directory, filename = os.path.split(file_path)
+        directory = os.path.join(directory, 'cached')
+        os.makedirs(directory, exist_ok=True)
         #         cached_features_file = os.path.join(directory, f'cached_lm_{block_size}_{tokenizer.hash}_{filename}')
 
-        # if False:
-        #     with open(cached_features_file, 'rb') as handle:
-        #         tokenized_text = pickle.load(handle)
-        # else:
-        with open(file_path, encoding="utf-8") as f:
-            text = f.read()
-        tokenized_text = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text))
+        if False:
+            with open(cached_features_file, 'rb') as handle:
+                tokenized_text = pickle.load(handle)
+        else:
+            with open(file_path, encoding="utf-8") as f:
+                text = f.read()
+            if hasattr(tokenizer, 'encode'):
+                tokenized_text = tokenizer.encode(text)
+            else:
+                tokenized_text = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text))
+            # with open(cached_features_file, 'wb') as handle:
+            #     pickle.dump(tokenized_text, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         examples = []
         # add random shift
@@ -81,13 +127,13 @@ class TextDataset(Dataset):
         rnd_shift = random.randrange(max_shift) if max_shift and shuffle else 0
 
         for i in range(rnd_shift, len(tokenized_text) - block_size + 1, block_size):
-            examples.append(tokenizer.build_inputs_with_special_tokens(tokenized_text[i:i + block_size]))
+            examples.append(tokenizer.add_special_tokens_single_sentence(tokenized_text[i:i + block_size]))
         # Note that we are loosing the last truncated example here for the sake of simplicity (no padding)
         # If your dataset is small, first you should loook for a bigger one :-) and second you
         # can change this behavior by adding (model specific) padding.
         return examples
 
-    def __init__(self, tokenizer, file_path='train', args=None):
+    def __init__(self, tokenizer, file_path='train', args=None, shuffle=True):
         if not hasattr(tokenizer, 'hash'): tokenizer.hash = ''
 
         logger.info(f"Loading features from {file_path}")
@@ -97,24 +143,14 @@ class TextDataset(Dataset):
             assert os.path.isdir(file_path)
             files = glob.glob(os.path.join(file_path, '*.txt'))
 
-        max_file_load=args.max_files_load
         files = sorted(files)
+        if shuffle: random.shuffle(files)
 
-        if (args.local_rank == -1):
-            random.shuffle(files)
-            if len(files)>max_file_load:
-                files=files[:max_file_load]
-        else:
-            shard_size=len(files)//torch.distributed.get_world_size()
-            if shard_size>max_file_load:
-                random.shuffle(files)
-                files = files[:max_file_load]
-            else:
-                files=files[torch.distributed.get_rank()*shard_size:(torch.distributed.get_rank()+1)*shard_size]
+        files = files[:2000]
 
         self.examples = []
         for fn in tqdm(files):
-            self.examples.extend(self.process_file(fn, tokenizer, args.block_size))
+            self.examples.extend(self.process_file(fn, tokenizer, args.block_size, shuffle))
 
     def __len__(self):
         return len(self.examples)
@@ -124,14 +160,9 @@ class TextDataset(Dataset):
 
 
 def load_and_cache_examples(args, tokenizer, evaluate=False):
-
-    dataset = TextDataset(
-        tokenizer,
-        file_path=args.eval_data_file if evaluate else args.train_data_file,
-        args=args
-    )
+    dataset = TextDataset(tokenizer, file_path=args.eval_data_file if evaluate else args.train_data_file, args=args,
+                          shuffle=not evaluate)
     return dataset
-
 
 
 def set_seed(args):
@@ -426,150 +457,104 @@ def main():
     parser = argparse.ArgumentParser()
 
     ## Required parameters
-    parser.add_argument(
-        "--train_data_file", default=None, type=str, required=True, help="The input training data file (a text file)."
-    )
-    parser.add_argument(
-        "--output_dir",
-        default=None,
-        type=str,
-        required=True,
-        help="The output directory where the model predictions and checkpoints will be written.",
-    )
+    parser.add_argument("--train_data_file", default=None, type=str, required=True,
+                        help="The input training data file (a text file).")
+    parser.add_argument("--output_dir", default=None, type=str, required=True,
+                        help="The output directory where the model predictions and checkpoints will be written.")
 
-    # Other parameters
-    parser.add_argument(
-        "--eval_data_file",
-        default=None,
-        type=str,
-        help="An optional input evaluation data file to evaluate the perplexity on (a text file).",
-    )
+    ## Other parameters
+    parser.add_argument("--eval_data_file", default=None, type=str,
+                        help="An optional input evaluation data file to evaluate the perplexity on (a text file).")
 
-    parser.add_argument("--model_type", default="bert", type=str, help="The model architecture to be fine-tuned.")
-    parser.add_argument(
-        "--model_name_or_path",
-        default="bert-base-cased",
-        type=str,
-        help="The model checkpoint for weights initialization.",
-    )
+    parser.add_argument("--model_type", default="bert", type=str,
+                        help="The model architecture to be fine-tuned.")
+    parser.add_argument("--model_name_or_path", default="bert-base-cased", type=str,
+                        help="The model checkpoint for weights initialization.")
 
-    parser.add_argument(
-        "--mlm", action="store_true", help="Train with masked-language modeling loss instead of language modeling."
-    )
-    parser.add_argument(
-        "--mlm_probability", type=float, default=0.15, help="Ratio of tokens to mask for masked language modeling loss"
-    )
+    parser.add_argument("--mlm", action='store_true',
+                        help="Train with masked-language modeling loss instead of language modeling.")
+    parser.add_argument("--mlm_probability", type=float, default=0.15,
+                        help="Ratio of tokens to mask for masked language modeling loss")
 
-    parser.add_argument(
-        "--config_name",
-        default="",
-        type=str,
-        help="Optional pretrained config name or path if not the same as model_name_or_path",
-    )
-    parser.add_argument(
-        "--tokenizer_name",
-        default="",
-        type=str,
-        help="Optional pretrained tokenizer name or path if not the same as model_name_or_path",
-    )
-    parser.add_argument(
-        "--cache_dir",
-        default="",
-        type=str,
-        help="Optional directory to store the pre-trained models downloaded from s3 (instread of the default one)",
-    )
+    parser.add_argument("--config_name", default="", type=str,
+                        help="Optional pretrained config name or path if not the same as model_name_or_path")
+    parser.add_argument("--tokenizer_name", default="", type=str,
+                        help="Optional pretrained tokenizer name or path if not the same as model_name_or_path")
+    parser.add_argument("--tokenizer_class", default="", type=str,
+                        help="Optional pretrained tokenizer clas")
+    parser.add_argument("--cache_dir", default="", type=str,
+                        help="Optional directory to store the pre-trained models downloaded from s3 (instread of the default one)")
+    parser.add_argument("--block_size", default=-1, type=int,
+                        help="Optional input sequence length after tokenization."
+                             "The training dataset will be truncated in block of this size for training."
+                             "Default to the model max input length for single sentence inputs (take into account special tokens).")
+    parser.add_argument("--do_train", action='store_true',
+                        help="Whether to run training.")
+    parser.add_argument("--do_eval", action='store_true',
+                        help="Whether to run eval on the dev set.")
+    parser.add_argument("--from_scratch", action='store_true',
+                        help="Whether to run eval on the dev set.")
+    parser.add_argument("--evaluate_during_training", action='store_true',
+                        help="Run evaluation during training at each logging step.")
+    parser.add_argument('--eval_steps', type=int, default=100,
+                        help="Evaluate every X updates steps.")
+    parser.add_argument("--do_lower_case", action='store_true',
+                        help="Set this flag if you are using an uncased model.")
 
-    parser.add_argument(
-        "--from_scratch", action="store_true"
-    )
-    parser.add_argument(
-        "--block_size",
-        default=1024,
-        type=int,
-        help="Optional input sequence length after tokenization."
-             "The training dataset will be truncated in block of this size for training."
-             "Default to the model max input length for single sentence inputs (take into account special tokens).",
-    )
-    parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
-    parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
-    parser.add_argument(
-        "--evaluate_during_training", action="store_true", help="Run evaluation during training at each logging step."
-    )
-    parser.add_argument(
-        "--do_lower_case", action="store_true", help="Set this flag if you are using an uncased model."
-    )
-
-    parser.add_argument("--per_gpu_train_batch_size", default=4, type=int, help="Batch size per GPU/CPU for training.")
-    parser.add_argument(
-        "--per_gpu_eval_batch_size", default=4, type=int, help="Batch size per GPU/CPU for evaluation."
-    )
-    parser.add_argument(
-        "--gradient_accumulation_steps",
-        type=int,
-        default=1,
-        help="Number of updates steps to accumulate before performing a backward/update pass.",
-    )
-    parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
-    parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
-    parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
-    parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
-    parser.add_argument(
-        "--num_train_epochs", default=1.0, type=float, help="Total number of training epochs to perform."
-    )
-    parser.add_argument(
-        "--max_steps",
-        default=-1,
-        type=int,
-        help="If > 0: set total number of training steps to perform. Override num_train_epochs.",
-    )
-    parser.add_argument(
-        "--max_files_load",
-        default=100,
-        type=int
-    )
-    parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
-
-    parser.add_argument("--logging_steps", type=int, default=50, help="Log every X updates steps.")
-    parser.add_argument("--save_steps", type=int, default=50, help="Save checkpoint every X updates steps.")
-    parser.add_argument(
-        "--save_total_limit",
-        type=int,
-        default=None,
-        help="Limit the total amount of checkpoints, delete the older checkpoints in the output_dir, does not delete by default",
-    )
-    parser.add_argument(
-        "--eval_all_checkpoints",
-        action="store_true",
-        help="Evaluate all checkpoints starting with the same prefix as model_name_or_path ending and ending with step number",
-    )
-    parser.add_argument("--no_cuda", action="store_true", help="Avoid using CUDA when available")
-    parser.add_argument(
-        "--overwrite_output_dir", action="store_true", help="Overwrite the content of the output directory"
-    )
-    parser.add_argument(
-        "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
-    )
-    parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
-
-    parser.add_argument(
-        "--fp16",
-        action="store_true",
-        help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit",
-    )
-    parser.add_argument(
-        "--fp16_opt_level",
-        type=str,
-        default="O1",
-        help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
-             "See details at https://nvidia.github.io/apex/amp.html",
-    )
-    parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
-    parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
-    parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
+    parser.add_argument("--per_gpu_train_batch_size", default=4, type=int,
+                        help="Batch size per GPU/CPU for training.")
+    parser.add_argument("--per_gpu_eval_batch_size", default=4, type=int,
+                        help="Batch size per GPU/CPU for evaluation.")
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
+                        help="Number of updates steps to accumulate before performing a backward/update pass.")
+    parser.add_argument("--learning_rate", default=5e-5, type=float,
+                        help="The initial learning rate for Adam.")
+    parser.add_argument("--weight_decay", default=0.0, type=float,
+                        help="Weight deay if we apply some.")
+    parser.add_argument("--adam_epsilon", default=1e-6, type=float,
+                        help="Epsilon for Adam optimizer.")
+    parser.add_argument("--max_grad_norm", default=1.0, type=float,
+                        help="Max gradient norm.")
+    parser.add_argument("--num_train_epochs", default=1.0, type=float,
+                        help="Total number of training epochs to perform.")
+    parser.add_argument("--max_steps", default=-1, type=int,
+                        help="If > 0: set total number of training steps to perform. Override num_train_epochs.")
     parser.add_argument("--warmup_samples", default=0, type=int,
                         help="Linear warmup over warmup_samples.")
     parser.add_argument("--lr_decay", action='store_true',
                         help="Decay LR using WarmupLinearSchedule.")
+
+    parser.add_argument("--unfreeze_level", default=-1, type=int,
+                        help="If > 0: freeze all layers except few first and last.")
+
+    parser.add_argument('--logging_steps', type=int, default=50,
+                        help="Log every X updates steps.")
+    parser.add_argument('--save_steps', type=int, default=50,
+                        help="Save checkpoint every X updates steps.")
+    parser.add_argument('--save_total_limit', type=int, default=None,
+                        help='Limit the total amount of checkpoints, delete the older checkpoints in the output_dir, does not delete by default')
+    parser.add_argument("--eval_all_checkpoints", action='store_true',
+                        help="Evaluate all checkpoints starting with the same prefix as model_name_or_path ending and ending with step number")
+    parser.add_argument("--no_cuda", action='store_true',
+                        help="Avoid using CUDA when available")
+    parser.add_argument('--overwrite_output_dir', action='store_true',
+                        help="Overwrite the content of the output directory")
+    parser.add_argument('--overwrite_cache', action='store_true',
+                        help="Overwrite the cached training and evaluation sets")
+    parser.add_argument('--seed', type=int, default=42,
+                        help="random seed for initialization")
+
+    parser.add_argument('--fp16', action='store_true',
+                        help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit")
+    parser.add_argument('--fp16_opt_level', type=str, default='O1',
+                        help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+                             "See details at https://nvidia.github.io/apex/amp.html")
+    parser.add_argument("--local_rank", type=int, default=-1,
+                        help="For distributed training: local_rank")
+    parser.add_argument("--rank", type=int, default=-1,
+                        help="For distributed training: rank")
+    parser.add_argument('--server_ip', type=str, default='', help="For distant debugging.")
+    parser.add_argument('--server_port', type=str, default='', help="For distant debugging.")
     args = parser.parse_args()
 
     if args.model_type in ["bert", "roberta", "distilbert"] and not args.mlm:
@@ -621,7 +606,7 @@ def main():
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
     config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
     print("//////////////       //////////    ////////")
-
+    if args.tokenizer_class: tokenizer_class = globals()[args.tokenizer_class]
     tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
                                                 do_lower_case=args.do_lower_case)
     if args.block_size <= 0:
@@ -634,6 +619,23 @@ def main():
                                             config=config)
 
     model.to(args.device)
+
+    print(200 * '/')
+    print(len([param for item in flatten_model(model)
+               for param in item.parameters()
+               if param.requires_grad]))  # freeze all layers but few first and last
+    if args.unfreeze_level >= 0:
+        flat = flatten_model(model)
+        flat = [item for item in flat if list(item.parameters())]
+        i_start = 3
+        i_end = 1
+        need_grads = set(flat[:i_start + args.unfreeze_level * 3]) | set(flat[-(i_end + args.unfreeze_level * 3):])
+        for item in flat:
+            requires_grad(item, item in need_grads)
+        print(200 * '/')
+        print(len([param for item in flatten_model(model)
+                   for param in item.parameters()
+                   if param.requires_grad]))
 
     if torch.distributed.get_rank() == 0:
         torch.distributed.barrier()  # End of barrier to make sure only the first process in distributed training download model & vocab
