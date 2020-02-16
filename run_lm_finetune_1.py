@@ -44,82 +44,37 @@ except:
 
 from tqdm import tqdm, trange
 from dataclasses import dataclass
-# from fastprogress import progress_bar
 
-from tokenizer_gpt2 import GPT2VocabTokenizer
+
 from transformers import (WEIGHTS_NAME, AdamW, WarmupLinearSchedule, WarmupConstantSchedule, WarmupCosineSchedule,
+
                           GPT2Config, GPT2LMHeadModel, GPT2Tokenizer,
-                          )
+)
+
 
 
 logger = logging.getLogger(__name__)
-
+from tokenizer_gpt2 import GPT2VocabTokenizer
 MODEL_CLASSES = {
-    'gpt2': (GPT2Config, GPT2LMHeadModel, GPT2Tokenizer),
+    'gpt2': (GPT2Config, GPT2LMHeadModel, GPT2VocabTokenizer),
 }
 
 
-@dataclass
-class MovingLoss():
-    steps: int = 1000
-    avg_loss = (0.0, 0.0)
-
-    def add(self, batch_loss: float):
-        k_s = 1 - 1 / self.steps
-        avg_loss = self.avg_loss
-        self.avg_loss = (self.avg_loss[0] * k_s + batch_loss * (1 - k_s),
-                         self.avg_loss[1] * k_s + 1.0 * (1 - k_s))
-
-    @property
-    def loss(self):
-        if self.avg_loss[1]:
-            return self.avg_loss[0] / self.avg_loss[1]
-
-
-def print_sample(model, tokenizer, device, args):
-    model.eval()
-    raw_text = """ На словах ты Лев Толстой,\n А на деле -"""
-    context_tokens = tokenizer.encode(raw_text)
-    out = sample_sequence(
-        model=model,
-        context=context_tokens,
-        length=500,
-        temperature=1,
-        top_k=0,
-        top_p=0.9,
-        device=device,
-        # is_xlnet=bool(args.model_type == "xlnet"),
-    )
-    out = out[0, len(context_tokens):].tolist()
-    text = raw_text + tokenizer.decode(out)
-    print(text)
-
-    with open(os.path.join(args.output_dir, 'sample.txt'), 'w') as f:
-        f.write(text)
-
-    model.train()
 
 
 class TextDataset(Dataset):
     @staticmethod
-    def process_file(file_path, tokenizer, block_size, shuffle):
+    def process_file(file_path, tokenizer, block_size, shuffle=True):
         directory, filename = os.path.split(file_path)
-        directory = os.path.join(directory, 'cached')
-        os.makedirs(directory, exist_ok=True)
         #         cached_features_file = os.path.join(directory, f'cached_lm_{block_size}_{tokenizer.hash}_{filename}')
 
-        if False:
-            with open(cached_features_file, 'rb') as handle:
-                tokenized_text = pickle.load(handle)
-        else:
-            with open(file_path, encoding="utf-8") as f:
-                text = f.read()
-            if hasattr(tokenizer, 'encode'):
-                tokenized_text = tokenizer.encode(text)
-            else:
-                tokenized_text = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text))
-            # with open(cached_features_file, 'wb') as handle:
-            #     pickle.dump(tokenized_text, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        # if False:
+        #     with open(cached_features_file, 'rb') as handle:
+        #         tokenized_text = pickle.load(handle)
+        # else:
+        with open(file_path, encoding="utf-8") as f:
+            text = f.read()
+        tokenized_text = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text))
 
         examples = []
         # add random shift
@@ -127,13 +82,13 @@ class TextDataset(Dataset):
         rnd_shift = random.randrange(max_shift) if max_shift and shuffle else 0
 
         for i in range(rnd_shift, len(tokenized_text) - block_size + 1, block_size):
-            examples.append(tokenizer.add_special_tokens_single_sentence(tokenized_text[i:i + block_size]))
+            examples.append(tokenizer.build_inputs_with_special_tokens(tokenized_text[i:i + block_size]))
         # Note that we are loosing the last truncated example here for the sake of simplicity (no padding)
         # If your dataset is small, first you should loook for a bigger one :-) and second you
         # can change this behavior by adding (model specific) padding.
         return examples
 
-    def __init__(self, tokenizer, file_path='train', args=None, shuffle=True):
+    def __init__(self, tokenizer, file_path='train', args=None):
         if not hasattr(tokenizer, 'hash'): tokenizer.hash = ''
 
         logger.info(f"Loading features from {file_path}")
@@ -143,14 +98,24 @@ class TextDataset(Dataset):
             assert os.path.isdir(file_path)
             files = glob.glob(os.path.join(file_path, '*.txt'))
 
+        max_file_load=args.max_files_load
         files = sorted(files)
-        if shuffle: random.shuffle(files)
 
-        files = files[:2000]
+        if (args.local_rank == -1):
+            random.shuffle(files)
+            if len(files)>max_file_load:
+                files=files[:max_file_load]
+        else:
+            shard_size=len(files)//torch.distributed.get_world_size()
+            if shard_size>max_file_load:
+                random.shuffle(files)
+                files = files[:max_file_load]
+            else:
+                files=files[torch.distributed.get_rank()*shard_size:(torch.distributed.get_rank()+1)*shard_size]
 
         self.examples = []
         for fn in tqdm(files):
-            self.examples.extend(self.process_file(fn, tokenizer, args.block_size, shuffle))
+            self.examples.extend(self.process_file(fn, tokenizer, args.block_size))
 
     def __len__(self):
         return len(self.examples)
@@ -158,10 +123,13 @@ class TextDataset(Dataset):
     def __getitem__(self, item):
         return torch.tensor(self.examples[item])
 
-
 def load_and_cache_examples(args, tokenizer, evaluate=False):
-    dataset = TextDataset(tokenizer, file_path=args.eval_data_file if evaluate else args.train_data_file, args=args,
-                          shuffle=not evaluate)
+
+    dataset = TextDataset(
+        tokenizer,
+        file_path=args.eval_data_file if evaluate else args.train_data_file,
+        args=args
+    )
     return dataset
 
 
@@ -521,6 +489,7 @@ def main():
                         help="If > 0: set total number of training steps to perform. Override num_train_epochs.")
     parser.add_argument("--warmup_samples", default=0, type=int,
                         help="Linear warmup over warmup_samples.")
+    parser.add_argument("--max_file_load", default=1024, type=int)
     parser.add_argument("--lr_decay", action='store_true',
                         help="Decay LR using WarmupLinearSchedule.")
 
@@ -605,8 +574,6 @@ def main():
 
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
     config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
-    print("//////////////       //////////    ////////")
-    if args.tokenizer_class: tokenizer_class = globals()[args.tokenizer_class]
     tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
                                                 do_lower_case=args.do_lower_case)
     if args.block_size <= 0:
@@ -619,23 +586,6 @@ def main():
                                             config=config)
 
     model.to(args.device)
-
-    print(200 * '/')
-    print(len([param for item in flatten_model(model)
-               for param in item.parameters()
-               if param.requires_grad]))  # freeze all layers but few first and last
-    if args.unfreeze_level >= 0:
-        flat = flatten_model(model)
-        flat = [item for item in flat if list(item.parameters())]
-        i_start = 3
-        i_end = 1
-        need_grads = set(flat[:i_start + args.unfreeze_level * 3]) | set(flat[-(i_end + args.unfreeze_level * 3):])
-        for item in flat:
-            requires_grad(item, item in need_grads)
-        print(200 * '/')
-        print(len([param for item in flatten_model(model)
-                   for param in item.parameters()
-                   if param.requires_grad]))
 
     if torch.distributed.get_rank() == 0:
         torch.distributed.barrier()  # End of barrier to make sure only the first process in distributed training download model & vocab
