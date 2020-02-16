@@ -366,7 +366,7 @@ def train(args, train_dataset, model, tokenizer):
                                                Perplexity=f'{torch.exp(torch.tensor((tr_loss - logging_loss) / args.logging_steps)):.2f}')
                     logging_loss = tr_loss
 
-                if torch.distributed.get_rank() in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
+                if (args.local_rank==-1) or torch.distributed.get_rank() in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
                     checkpoint_prefix = "checkpoint"
                     # Save model checkpoint
                     output_dir = os.path.join(args.output_dir, "{}-{}".format(checkpoint_prefix, global_step))
