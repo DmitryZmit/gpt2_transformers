@@ -333,8 +333,8 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
 
     tr_loss, logging_loss = 0.0, 0.0
 
-    model_to_resize = model.module if hasattr(model, "module") else model  # Take care of distributed/parallel training
-    model_to_resize.resize_token_embeddings(len(tokenizer))
+    # model_to_resize = model.module if hasattr(model, "module") else model  # Take care of distributed/parallel training
+    # model_to_resize.resize_token_embeddings(len(tokenizer))
 
     model.zero_grad()
     train_iterator = trange(
