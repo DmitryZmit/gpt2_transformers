@@ -21,6 +21,8 @@ parser.add_argument('--path_to_files', type=str, default='', help="For distant d
 parser.add_argument('--path_to_vocab', type=str, default='', help="For distant debugging.")
 parser.add_argument("--overwrite_cache", action='store_true',
                     help="overwrite cache")
+parser.add_argument("--local_rank", type=int, default=-1,
+                    help="block size")
 args = parser.parse_args()
 
 tokenizer = GPT2VocabTokenizer.from_pretrained(args.path_to_vocab)
