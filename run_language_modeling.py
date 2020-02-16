@@ -68,26 +68,32 @@ class TextDataset(Dataset):
     @staticmethod
     def process_file(file_path, tokenizer, block_size, shuffle=True):
         directory, filename = os.path.split(file_path)
-        #         cached_features_file = os.path.join(directory, f'cached_lm_{block_size}_{tokenizer.hash}_{filename}')
-
-        # if False:
-        #     with open(cached_features_file, 'rb') as handle:
-        #         tokenized_text = pickle.load(handle)
-        # else:
-        with open(file_path, encoding="utf-8") as f:
-            text = f.read()
-        tokenized_text = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text))
-
+        directory = os.path.join(directory, 'cached')
+        cached_features_file = os.path.join(directory, f'cached_lm_{block_size}_{len(tokenizer.vocab)}_{filename}')
         examples = []
         # add random shift
-        max_shift = max(min(block_size, len(tokenized_text) - block_size), 0)
-        rnd_shift = random.randrange(max_shift) if max_shift and shuffle else 0
+        if os.path.exists(cached_features_file) and not args.overwrite_cache:
+            logger.info("Loading features from cached file %s", cached_features_file)
+            with open(cached_features_file, "rb") as handle:
+                examples = pickle.load(handle)
+        else:
+            logger.info("Creating features from dataset file at %s", directory)
 
-        for i in range(rnd_shift, len(tokenized_text) - block_size + 1, block_size):
-            examples.append(tokenizer.build_inputs_with_special_tokens(tokenized_text[i:i + block_size]))
-        # Note that we are loosing the last truncated example here for the sake of simplicity (no padding)
-        # If your dataset is small, first you should loook for a bigger one :-) and second you
-        # can change this behavior by adding (model specific) padding.
+            examples = []
+            with open(file_path, encoding="utf-8") as f:
+                text = f.read()
+
+            tokenized_text = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text))
+
+            for i in range(0, len(tokenized_text) - block_size + 1, block_size):  # Truncate in block of block_size
+                examples.append(tokenizer.build_inputs_with_special_tokens(tokenized_text[i: i + block_size]))
+            # Note that we are loosing the last truncated example here for the sake of simplicity (no padding)
+            # If your dataset is small, first you should loook for a bigger one :-) and second you
+            # can change this behavior by adding (model specific) padding.
+
+            logger.info("Saving features into cached file %s", cached_features_file)
+            with open(cached_features_file, "wb") as handle:
+                pickle.dump(examples, handle, protocol=pickle.HIGHEST_PROTOCOL)
         return examples
 
     def __init__(self, tokenizer,args, file_path='train', block_size=512):
