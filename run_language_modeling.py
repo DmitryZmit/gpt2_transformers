@@ -68,7 +68,7 @@ class TextDataset(Dataset):
     @staticmethod
     def process_file(file_path, tokenizer, block_size,args, shuffle=True):
         directory, filename = os.path.split(file_path)
-        directory = os.path.join(directory, 'cached')
+        directory = os.path.join(directory, f'cached_{args.block_size}_{len(tokenizer.vocab)}')
         os.makedirs(directory, exist_ok=True)
         cached_features_file = os.path.join(directory, f'cached_lm_{block_size}_{len(tokenizer.vocab)}_{filename}')
         examples = []
