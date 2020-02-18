@@ -420,6 +420,9 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
                     torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                     torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
                     logger.info("Saving optimizer and scheduler states to %s", output_dir)
+                    # evaluate model
+                    result = evaluate(args, model, tokenizer, prefix=prefix)
+
 
             if args.max_steps > 0 and global_step > args.max_steps:
                 epoch_iterator.close()
@@ -646,8 +649,7 @@ def main():
                         help="Train model from scratch.")
     args = parser.parse_args()
 
-    if args.use_cluster:
-        args.local_rank = torch.distributed.get_rank()
+
 
     if args.model_type in ["bert", "roberta", "distilbert", "camembert"] and not args.mlm:
         raise ValueError(
@@ -697,6 +699,9 @@ def main():
         torch.distributed.init_process_group(backend="nccl")
         args.n_gpu = 1
     args.device = device
+
+    if args.use_cluster:
+        args.local_rank = torch.distributed.get_rank()
 
     # Setup logging
     logging.basicConfig(
