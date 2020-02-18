@@ -318,6 +318,8 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
     )
     logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
     logger.info("  Total optimization steps = %d", t_total)
+    logger.info("  Get rank  = %d", torch.distributed.get_rank())
+    logger.info("  Get local_rank  = %d", args.local_rank)
 
     global_step = 0
     epochs_trained = 0
