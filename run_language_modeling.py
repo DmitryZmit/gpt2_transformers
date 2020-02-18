@@ -66,7 +66,7 @@ MODEL_CLASSES = {
 
 class TextDataset(Dataset):
     @staticmethod
-    def process_file(file_path, tokenizer, block_size,args, shuffle=True):
+    def process_file(file_path, tokenizer, block_size,args):
         directory, filename = os.path.split(file_path)
         directory = os.path.join(directory, f'cached_{args.block_size}_{len(tokenizer.vocab)}')
         os.makedirs(directory, exist_ok=True)
@@ -80,14 +80,18 @@ class TextDataset(Dataset):
         else:
             logger.info("Creating features from dataset file at %s", directory)
 
+
             examples = []
             with open(file_path, encoding="utf-8") as f:
                 text = f.read()
 
             tokenized_text = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text))
 
-            for i in range(0, len(tokenized_text) - block_size + 1, block_size):  # Truncate in block of block_size
-                examples.append(tokenizer.build_inputs_with_special_tokens(tokenized_text[i: i + block_size]))
+            max_shift = max(min(block_size, len(tokenized_text) - block_size), 0)
+            rnd_shift = random.randrange(max_shift) if max_shift and args.shufle_data else 0
+
+            for i in range(rnd_shift, len(tokenized_text) - block_size + 1, block_size):
+                examples.append(tokenizer.add_special_tokens_single_sentence(tokenized_text[i:i + block_size]))
             # Note that we are loosing the last truncated example here for the sake of simplicity (no padding)
             # If your dataset is small, first you should loook for a bigger one :-) and second you
             # can change this behavior by adding (model specific) padding.
@@ -98,17 +102,24 @@ class TextDataset(Dataset):
         return examples
 
     def __init__(self, tokenizer,args, file_path='train', block_size=512):
-        if not hasattr(tokenizer, 'hash'): tokenizer.hash = ''
 
         logger.info(f"Loading features from {file_path}")
-        if os.path.isfile(file_path):
-            files = [file_path]
-        else:
-            assert os.path.isdir(file_path)
-            files = glob.glob(os.path.join(file_path, '*.txt'))
-
         max_file_load=args.max_files_load
-        files = sorted(files)
+        file_with_list=os.path.join(file_path,'files.list')
+
+        if not os.path.exists(file_with_list) :
+            if (args.local_rank==-1) or  (torch.distributed.get_rank()==0):
+                if os.path.isfile(file_path):
+                    files = [file_path]
+                else:
+                    assert os.path.isdir(file_path)
+                    files = glob.glob(os.path.join(file_path, '*.txt'))
+                random.shuffle(files)
+                with open(file_with_list,'w') as fp:
+                    fp.write('\n'.join(files))
+
+        with open(file_with_list,'r') as fp:
+            files=fp.read().split('\n')
 
         if (args.local_rank == -1):
             random.shuffle(files)
@@ -318,7 +329,7 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
     )
     logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
     logger.info("  Total optimization steps = %d", t_total)
-    logger.info("  Get rank  = %d", torch.distributed.get_rank())
+    # logger.info("  Get rank  = %d", torch.distributed.get_rank())
     logger.info("  Get local_rank  = %d", args.local_rank)
 
     global_step = 0
@@ -644,6 +655,8 @@ def main():
     parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
     parser.add_argument("--from_scratch", action='store_true',
+                        help="Train model from scratch.")
+    parser.add_argument("--shufle_data", action='store_true',
                         help="Train model from scratch.")
     args = parser.parse_args()
 
