@@ -242,7 +242,7 @@ def mask_tokens(inputs: torch.Tensor, tokenizer: PreTrainedTokenizer, args) -> T
 
 def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedTokenizer) -> Tuple[int, float]:
     """ Train the model """
-    if args.local_rank in [-1, 0]:
+    if (args.local_rank==-1) or (torch.distributed.get_rank() in [-1, 0]):
         tb_writer = SummaryWriter()
 
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
@@ -345,11 +345,11 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
 
     model.zero_grad()
     train_iterator = trange(
-        epochs_trained, int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0]
+        epochs_trained, int(args.num_train_epochs), desc="Epoch", disable=(args.local_rank!=-1) and (torch.distributed.get_rank() not in [-1, 0])
     )
     set_seed(args)  # Added here for reproducibility
     for _ in train_iterator:
-        epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
+        epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=(args.local_rank!=-1) and (torch.distributed.get_rank() not in [-1, 0]))
         for step, batch in enumerate(epoch_iterator):
 
             # Skip past any already trained steps if resuming training
@@ -386,7 +386,7 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
                 model.zero_grad()
                 global_step += 1
 
-                if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
+                if ((args.local_rank==-1) or (torch.distributed.get_rank() in [-1, 0])) and args.logging_steps > 0 and global_step % args.logging_steps == 0:
                     # Log metrics
                     if (
                         args.local_rank == -1 and args.evaluate_during_training
@@ -401,7 +401,7 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
                                                Perplexity=f'{torch.exp(torch.tensor((tr_loss - logging_loss) / args.logging_steps)):.2f}')
                     logging_loss = tr_loss
 
-                if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
+                if ((args.local_rank==-1) or (torch.distributed.get_rank() in [-1, 0])) and args.save_steps > 0 and global_step % args.save_steps == 0:
                     checkpoint_prefix = "checkpoint"
                     # Save model checkpoint
                     output_dir = os.path.join(args.output_dir, "{}-{}".format(checkpoint_prefix, global_step))
@@ -428,7 +428,7 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
             train_iterator.close()
             break
 
-    if args.local_rank in [-1, 0]:
+    if (args.local_rank==-1) or (torch.distributed.get_rank() in [-1, 0]):
         tb_writer.close()
 
     return global_step, tr_loss / global_step
