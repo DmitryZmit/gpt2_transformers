@@ -347,11 +347,11 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
 
     model.zero_grad()
     train_iterator = trange(
-        epochs_trained, int(args.num_train_epochs), desc="Epoch", disable=(args.local_rank not in [-1, 0]) and (torch.distributed.get_rank() not in [-1, 0])
+        epochs_trained, int(args.num_train_epochs), desc="Epoch", disable= (torch.distributed.get_rank() not in [-1, 0]) if args.local_rank!=-1 else False
     )
     set_seed(args)  # Added here for reproducibility
     for _ in train_iterator:
-        epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=(args.local_rank not in [-1, 0]) and (torch.distributed.get_rank() not in [-1, 0]))
+        epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=(torch.distributed.get_rank() not in [-1, 0]) if args.local_rank!=-1 else False )
         for step, batch in enumerate(epoch_iterator):
 
             # Skip past any already trained steps if resuming training
