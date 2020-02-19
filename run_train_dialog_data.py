@@ -63,14 +63,16 @@ MODEL_CLASSES = {
     "gpt2": (GPT2Config, GPT2LMHeadModel, GPT2VocabTokenizer),
 
 }
+speaker1_token='[speaker1]'
+speaker2_token='[speaker2]'
 
 class TextDataset(Dataset):
     @staticmethod
-    def process_file(file_path, tokenizer, block_size,args, shuffle=True):
+    def process_file(file_path, tokenizer,args, shuffle=True):
         directory, filename = os.path.split(file_path)
         directory = os.path.join(directory, f'cached_{args.block_size}_{len(tokenizer.vocab)}')
         os.makedirs(directory, exist_ok=True)
-        cached_features_file = os.path.join(directory, f'cached_lm_{block_size}_{len(tokenizer.vocab)}_{filename}')
+        cached_features_file = os.path.join(directory, f'cached_lm_{args.block_size}_{len(tokenizer.vocab)}_{filename}')
         examples = []
         # add random shift
         if os.path.exists(cached_features_file) and not args.overwrite_cache:
@@ -82,15 +84,15 @@ class TextDataset(Dataset):
 
             examples = []
             with open(file_path, encoding="utf-8") as f:
-                text = f.read()
+                dialogs = f.read().split('\n')
 
-            tokenized_text = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text))
-
-            for i in range(0, len(tokenized_text) - block_size + 1, block_size):  # Truncate in block of block_size
-                examples.append(tokenizer.build_inputs_with_special_tokens(tokenized_text[i: i + block_size]))
-            # Note that we are loosing the last truncated example here for the sake of simplicity (no padding)
-            # If your dataset is small, first you should loook for a bigger one :-) and second you
-            # can change this behavior by adding (model specific) padding.
+            for dialog in dialogs:
+                try:
+                    sample=tokenizer.encode(dialog, max_length=args.block_size)
+                    # sample+=[tokenizer.pad_token_id for _ in range (args.block_size-len(sample))]
+                    examples.append(sample)
+                except ValueError:
+                    logger.info(f'Exception  tokens length more than max_len {args.block_size}')
 
             logger.info("Saving features into cached file %s", cached_features_file)
             with open(cached_features_file, "wb") as handle:
@@ -124,7 +126,7 @@ class TextDataset(Dataset):
 
         self.examples = []
         for fn in tqdm(files):
-            self.examples.extend(self.process_file(fn, tokenizer, block_size,args=args))
+            self.examples.extend(self.process_file(fn, tokenizer,args=args))
 
     def __len__(self):
         return len(self.examples)
@@ -734,6 +736,9 @@ def main():
             "You are instantiating a new {} tokenizer. This is not supported, but you can do it from another script, save it,"
             "and load it from here, using --tokenizer_name".format(tokenizer_class.__name__)
         )
+
+    # Add spetial tokens to tokenizer
+    tokenizer.add_tokens([speaker1_token,speaker2_token])
 
     if args.block_size <= 0:
         args.block_size = tokenizer.max_len

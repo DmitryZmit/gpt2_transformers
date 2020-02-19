@@ -91,7 +91,7 @@ class TextDataset(Dataset):
             rnd_shift = random.randrange(max_shift) if max_shift and args.shufle_data else 0
 
             for i in range(rnd_shift, len(tokenized_text) - block_size + 1, block_size):
-                examples.append(tokenizer.add_special_tokens_single_sentence(tokenized_text[i:i + block_size]))
+                examples.append(tokenizer.build_inputs_with_special_tokens(tokenized_text[i:i + block_size]))
             # Note that we are loosing the last truncated example here for the sake of simplicity (no padding)
             # If your dataset is small, first you should loook for a bigger one :-) and second you
             # can change this behavior by adding (model specific) padding.

@@ -32,16 +32,17 @@ class GPT2VocabTokenizer(BertTokenizer):
 
         # prepare text to code \n
         text = text.replace('\n', f' {newlinetoken} ')
+
         return super().encode(text,
                         text_pair=text_pair,
                         add_special_tokens=add_special_tokens,
                         max_length=max_length,
                         stride=stride,
                         truncation_strategy=truncation_strategy,
-                        pad_to_max_length=pad_to_max_length,
                         return_tensors=return_tensors,
                         **kwargs
                         )
+
     def decode(cls, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
         result=super().decode(token_ids=token_ids, skip_special_tokens=skip_special_tokens, clean_up_tokenization_spaces=clean_up_tokenization_spaces)
         #convert newlinetoken  token to \n
@@ -49,6 +50,11 @@ class GPT2VocabTokenizer(BertTokenizer):
         return  result
     def build_inputs_with_special_tokens(cls,token_ids):
         return token_ids
+    def add_special_tokens_single_sentence(cls, token_ids):
+        return token_ids
+    def tokenize(cls,text):
+        text = text.replace('\n', f' {newlinetoken} ')
+        return super().tokenize(text)
 if __name__ == "__main__":
 
     tokenizer=GPT2VocabTokenizer.from_pretrained('/media/dmitryz/SAMSUNG_T5/models/gpt2_small_v5_v100')
