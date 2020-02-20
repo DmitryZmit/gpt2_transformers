@@ -4,7 +4,7 @@ import re
 import torch
 
 import numpy as np
-
+import argparse
 from os.path import join
 from transformers import GPT2LMHeadModel, GPT2Config
 from tokenizer_gpt2 import GPT2VocabTokenizer
@@ -32,6 +32,7 @@ class Gen_answer():
         # Prepare Model and Optimizer
         ##########################################################################
         self.model = GPT2LMHeadModel.from_pretrained(args.model_name_or_path )
+        self.model.to(self.device)
         total_params = sum([np.prod(p.size()) for p in self.model.parameters()])
         print('Number of parameter = {}'.format(total_params))
         self.model.eval()
@@ -60,11 +61,44 @@ class Gen_answer():
 
         out = out[0, len(context_tokens):].tolist()
 
-        res_text = self.enc.decode(out)
+        res_text = self.tokenizer.decode(out)
+        print(res_text)
         res_text.replace(context_str,' ')
-        answer_full=re.findall(r'', res_text)
-        if len(answer_full)>0:
-            answer = re.findall(r'[^\n]+', res_text)[0]
-        else:
-            answer=':)'
+        answer=res_text[0:res_text.find(speaker1_token)]
+        answer = answer[0:answer.find('[PAD]')]
+        # if len(answer_full)>0:
+        #     answer = re.findall(r'[^\n]+', res_text)[0]
+        # else:
+        #     answer=':)'
         return answer
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model_name_or_path', type=str,
+                        help='pretrained model name or path to local checkpoint')
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--max_seq_length", type=int, default=128)
+    parser.add_argument("--context_length", type=int, default=4)
+    parser.add_argument("--init_checkpoint", type=str)
+    parser.add_argument('--telegram_token', type=str,
+                        help='telegram bot token')
+
+
+    # do normal parsing
+    args = parser.parse_args()
+
+    gen=Gen_answer(args)
+    notstop=True
+    contex=[]
+    while notstop:
+        text=input('::')
+        if text=='stop':
+            notstop=False
+            continue
+        if text=='delete':
+            contex=[]
+            print('Context deleted')
+        contex.append(text)
+        answer= gen.get_answer(contex)
+        contex.append(answer)
+        print(answer)
