@@ -7,7 +7,6 @@ import sys
 import os
 import codecs
 import re
-from gpt2_training.train_utils import load_model, boolean_string, set_lr, get_eval_list_same_length
 
 import argparse
 from gen_answer import Gen_answer
@@ -16,13 +15,14 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--model_name_or_path', type=str,
                     help='pretrained model name or path to local checkpoint')
 parser.add_argument("--seed", type=int, default=42)
+parser.add_argument("--temperature", type=int, default=1)
+parser.add_argument("--top_k", type=int, default=5)
 parser.add_argument("--max_seq_length", type=int, default=128)
 parser.add_argument("--context_length", type=int, default=4)
 parser.add_argument("--init_checkpoint", type=str)
 parser.add_argument('--telegram_token', type=str,
                     help='telegram bot token')
-parser.add_argument("--fp16", type=boolean_string, default=False)
-parser.add_argument("--no_token_id", type=boolean_string, default=True)
+
 
 
 
@@ -86,7 +86,7 @@ def handle_text(message):
     if len(act_rep[message.chat.id])>win:
         act_rep[message.chat.id]=act_rep[message.chat.id][1:]
     context=' '.join(act_rep[message.chat.id])
-    answer= model.get_answer(act_rep[message.chat.id])
+    answer= model.get_answer(act_rep[message.chat.id],t=args.temperature,tk=args.top_k)
     answer=answer.replace('и<UNK>','й')
     act_rep[message.chat.id].append(answer)
     if len(act_rep[message.chat.id])>win:

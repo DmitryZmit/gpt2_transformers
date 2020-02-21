@@ -263,7 +263,7 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
             return pad_sequence(examples, batch_first=True)
         return pad_sequence(examples, batch_first=True, padding_value=tokenizer.pad_token_id)
 
-    train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    train_sampler = RandomSampler(train_dataset) #if args.local_rank == -1 else DistributedSampler(train_dataset)
     train_dataloader = DataLoader(
         train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate
     )

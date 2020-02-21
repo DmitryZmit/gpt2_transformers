@@ -88,11 +88,15 @@ class TextDataset(Dataset):
 
             for dialog in dialogs:
                 try:
-                    sample=tokenizer.encode(dialog, max_length=args.block_size)
-                    # sample+=[tokenizer.pad_token_id for _ in range (args.block_size-len(sample))]
-                    examples.append(sample)
+                    sample = tokenizer.encode(dialog, max_length=args.block_size)
+                    if len(sample) == 0:
+                        print("Exception  0 len dialog -" + dialog)
+                        continue
+                    # sample += [tokenizer.pad_token_id for _ in range(args.block_size - len(sample))]
                 except ValueError:
-                    logger.info(f'Exception  tokens length more than max_len {args.block_size}')
+                    print(f'Exception  tokens length more than max_len {args.block_size}')
+                    continue
+                examples.append(sample)
 
             logger.info("Saving features into cached file %s", cached_features_file)
             with open(cached_features_file, "wb") as handle:
@@ -254,7 +258,7 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
             return pad_sequence(examples, batch_first=True)
         return pad_sequence(examples, batch_first=True, padding_value=tokenizer.pad_token_id)
 
-    train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    train_sampler = RandomSampler(train_dataset) #if args.local_rank == -1 else DistributedSampler(train_dataset)
     train_dataloader = DataLoader(
         train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate
     )
@@ -363,7 +367,15 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
             inputs = inputs.to(args.device)
             labels = labels.to(args.device)
             model.train()
-            outputs = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels)
+            try:
+                outputs = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels)
+            except RuntimeError:
+
+                with open('train_log.txt','a') as fp:
+                    fp.write(f'Error with batch step {step} local_rank {args.local_rank}\n')
+                    fp.write('input_ids '+str(inputs)+'\n')
+                print(f'Error with batch step {step} local_rank {args.local_rank}  input_ids '+str(inputs)+'\n')
+                continue
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
             if args.n_gpu > 1:

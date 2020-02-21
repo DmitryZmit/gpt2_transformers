@@ -51,10 +51,14 @@ def process_file(file_path):
         for dialog in dialogs:
             try:
                 sample = tokenizer.encode(dialog, max_length=args.block_size)
+                if len(sample)==0:
+                    print("Exception  0 len dialog -"+dialog)
+                    continue
                 # sample += [tokenizer.pad_token_id for _ in range(args.block_size - len(sample))]
-                examples.append(sample)
             except ValueError:
                 print(f'Exception  tokens length more than max_len {args.block_size}')
+                continue
+            examples.append(sample)
 
         # logger.info("Saving features into cached file %s", cached_features_file)
         with open(cached_features_file, "wb") as handle:

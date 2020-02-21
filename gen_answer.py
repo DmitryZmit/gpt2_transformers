@@ -31,7 +31,7 @@ class Gen_answer():
         #########################################################################
         # Prepare Model and Optimizer
         ##########################################################################
-        self.model = GPT2LMHeadModel.from_pretrained(args.model_name_or_path )
+        self.model = GPT2LMHeadModel.from_pretrained(args.init_checkpoint,config=self.config )
         self.model.to(self.device)
         total_params = sum([np.prod(p.size()) for p in self.model.parameters()])
         print('Number of parameter = {}'.format(total_params))
@@ -62,9 +62,10 @@ class Gen_answer():
         out = out[0, len(context_tokens):].tolist()
 
         res_text = self.tokenizer.decode(out)
-        print(res_text)
+        # print(res_text)
         res_text.replace(context_str,' ')
-        answer=res_text[0:res_text.find(speaker1_token)]
+        answer = res_text[0:res_text.find(speaker2_token)]
+        answer=answer[0:answer.find(speaker1_token)]
         answer = answer[0:answer.find('[PAD]')]
         # if len(answer_full)>0:
         #     answer = re.findall(r'[^\n]+', res_text)[0]
