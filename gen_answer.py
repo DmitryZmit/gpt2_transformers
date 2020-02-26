@@ -38,7 +38,7 @@ class Gen_answer():
         self.model.eval()
 
     def get_answer(self, context,t=1,tk=5,max_len=64):
-        context_str=''
+        context_str=speaker2_token+' Меня зовут Катя. Мне 5 лет. Я люблю готовить.' #speaker2_token + ' '+'Меня зовут Петя.'+speaker2_token + ' Я обожаю Путина. '+speaker2_token +' Мне пять лет.'+speaker2_token +\' Я люблю котиков.' +speaker2_token + ' Я повар. '+speaker2_token + ' '+'Я живу в Питере. '+speaker2_token + ' '
         count=1
         for rep in context:
             if count % 2 == 1:
@@ -80,6 +80,8 @@ if __name__ == '__main__':
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max_seq_length", type=int, default=128)
     parser.add_argument("--context_length", type=int, default=4)
+    parser.add_argument("--top_k", type=int, default=5)
+    parser.add_argument("--t", type=int, default=1)
     parser.add_argument("--init_checkpoint", type=str)
     parser.add_argument('--telegram_token', type=str,
                         help='telegram bot token')
@@ -99,7 +101,8 @@ if __name__ == '__main__':
         if text=='delete':
             contex=[]
             print('Context deleted')
+            continue
         contex.append(text)
-        answer= gen.get_answer(contex)
+        answer= gen.get_answer(contex,t=args.t,tk=args.top_k)
         contex.append(answer)
         print(answer)
