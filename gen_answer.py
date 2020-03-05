@@ -37,7 +37,7 @@ class Gen_answer():
         print('Number of parameter = {}'.format(total_params))
         self.model.eval()
 
-    def get_answer(self, context,t=1,tk=5,max_len=64):
+    def get_answer(self, context,t=1,top_k=5,top_p=0.0, max_len=64):
         context_str=speaker2_token+' Меня зовут Катя. Мне 5 лет. Я люблю готовить.' #speaker2_token + ' '+'Меня зовут Петя.'+speaker2_token + ' Я обожаю Путина. '+speaker2_token +' Мне пять лет.'+speaker2_token +\' Я люблю котиков.' +speaker2_token + ' Я повар. '+speaker2_token + ' '+'Я живу в Питере. '+speaker2_token + ' '
         count=1
         for rep in context:
@@ -53,8 +53,8 @@ class Gen_answer():
             num_samples=1,
             length=max_len,
             temperature=t,
-            top_k=tk,
-            # top_p=0.3,
+            top_k=top_k,
+            top_p=top_p,
             device=self.device,
 
         )
@@ -81,6 +81,7 @@ if __name__ == '__main__':
     parser.add_argument("--max_seq_length", type=int, default=128)
     parser.add_argument("--context_length", type=int, default=4)
     parser.add_argument("--top_k", type=int, default=5)
+    parser.add_argument("--top_p", type=float, default=0.9)
     parser.add_argument("--t", type=int, default=1)
     parser.add_argument("--init_checkpoint", type=str)
     parser.add_argument('--telegram_token', type=str,

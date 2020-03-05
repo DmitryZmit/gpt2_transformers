@@ -148,8 +148,8 @@ def main():
     parser.add_argument("--padding_text", type=str, default="")
     parser.add_argument("--length", type=int, default=20)
     parser.add_argument("--temperature", type=float, default=1.0)
-    parser.add_argument("--top_k", type=int, default=0)
-    parser.add_argument("--top_p", type=float, default=0.9)
+    parser.add_argument("--top_k", type=int, default=5)
+    parser.add_argument("--top_p", type=float, default=0.0)
     parser.add_argument("--no_cuda", action='store_true',
                         help="Avoid using CUDA when available")
     parser.add_argument('--seed', type=int, default=42,
@@ -178,7 +178,9 @@ def main():
         print(args)
         stop=False
         while not stop:
-            raw_text = input("::")
+            raw_text = 'Над желтизной правительственных зданий '#input("::")
+            print(raw_text)
+            stop = True
             if raw_text=='stop':
                 stop=True
             if args.model_type in ["transfo-xl", "xlnet"]:

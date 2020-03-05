@@ -57,9 +57,11 @@ class GPT2VocabTokenizer(BertTokenizer):
         return super().tokenize(text)
 if __name__ == "__main__":
 
-    tokenizer=GPT2VocabTokenizer.from_pretrained('/media/dmitryz/SAMSUNG_T5/models/gpt2_small_v5_v100')
+    tokenizer=GPT2VocabTokenizer.from_pretrained('/raid/data/nlp/models/gpt2/medium_vb/medium_vb_v1')
     text='Привет как дела? \n Что делаешь :?'
     print(text)
     print(tokenizer.encode(text))
     print(tokenizer.decode(tokenizer.encode(text)))
     print(tokenizer.max_len_single_sentence)
+    print(tokenizer.build_inputs_with_special_tokens(tokenizer.tokenize(text)))
+    print(tokenizer.build_inputs_with_special_tokens(tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text))))

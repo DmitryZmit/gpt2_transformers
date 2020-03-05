@@ -17,6 +17,7 @@ parser.add_argument('--model_name_or_path', type=str,
 parser.add_argument("--seed", type=int, default=42)
 parser.add_argument("--temperature", type=int, default=1)
 parser.add_argument("--top_k", type=int, default=5)
+parser.add_argument("--top_p", type=float, default=0.0)
 parser.add_argument("--max_seq_length", type=int, default=128)
 parser.add_argument("--context_length", type=int, default=4)
 parser.add_argument("--init_checkpoint", type=str)
@@ -86,7 +87,7 @@ def handle_text(message):
     if len(act_rep[message.chat.id])>win:
         act_rep[message.chat.id]=act_rep[message.chat.id][1:]
     context=' '.join(act_rep[message.chat.id])
-    answer= model.get_answer(act_rep[message.chat.id],t=args.temperature,tk=args.top_k)
+    answer= model.get_answer(act_rep[message.chat.id],t=args.temperature,top_k=args.top_k,top_p=args.top_p)
     answer=answer.replace('и<UNK>','й')
     act_rep[message.chat.id].append(answer)
     if len(act_rep[message.chat.id])>win:
