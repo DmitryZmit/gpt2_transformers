@@ -40,6 +40,7 @@ class GPT2VocabTokenizer(BertTokenizer):
                         stride=stride,
                         truncation_strategy=truncation_strategy,
                         return_tensors=return_tensors,
+                        pad_to_max_length=pad_to_max_length,
                         **kwargs
                         )
 
