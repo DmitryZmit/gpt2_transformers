@@ -104,6 +104,6 @@ if __name__ == '__main__':
             print('Context deleted')
             continue
         contex.append(text)
-        answer= gen.get_answer(contex,t=args.t,tk=args.top_k)
+        answer= gen.get_answer(contex,t=args.t,top_k=args.top_k,top_p=args.top_p)
         contex.append(answer)
         print(answer)

@@ -36,6 +36,7 @@ def process_file(file_path):
     cached_features_file = os.path.join(directory, f'cached_lm_{args.block_size}_{len(tokenizer.vocab)}_{filename}')
     examples = []
     # add random shift
+
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         # logger.info("Loading features from cached file %s", cached_features_file)
         with open(cached_features_file, "rb") as handle:
@@ -47,7 +48,7 @@ def process_file(file_path):
         with open(file_path, encoding="utf-8") as f:
             text = f.read()
 
-        tokenized_text = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text))
+        tokenized_text = tokenizer.encode(text)
 
         for i in range(0, len(tokenized_text) - args.block_size + 1, args.block_size):  # Truncate in block of block_size
             examples.append(tokenizer.build_inputs_with_special_tokens(tokenized_text[i: i + args.block_size]))
@@ -76,4 +77,5 @@ if __name__ == "__main__":
         batch_size=args.batch_size
         if end_ind > len(files) + 1:
             end_ind = len(files) + 1
-        pool.map(prepare,[files[i:i+batch_size] for i in range(ind,end_ind,batch_size)])
+        #pool.map(prepare,[files[i:i+batch_size] for i in range(ind,end_ind,batch_size)])
+        prepare(files[ind:end_ind])

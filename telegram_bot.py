@@ -11,6 +11,11 @@ import re
 import argparse
 from gen_answer import Gen_answer
 
+import ssl
+
+from telebot import apihelper
+apihelper.proxy  = {'http': 'http://206.189.235.115:8080'}
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_name_or_path', type=str,
                     help='pretrained model name or path to local checkpoint')
@@ -129,6 +134,8 @@ def handle_document_audio(message):
 if __name__ == '__main__':
 
     try:
+
         bot.polling(none_stop=True, interval=0,timeout=1000)
+
     except :
         print('Error')
