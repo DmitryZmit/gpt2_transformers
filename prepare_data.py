@@ -77,5 +77,4 @@ if __name__ == "__main__":
         batch_size=args.batch_size
         if end_ind > len(files) + 1:
             end_ind = len(files) + 1
-        #pool.map(prepare,[files[i:i+batch_size] for i in range(ind,end_ind,batch_size)])
-        prepare(files[ind:end_ind])
+        pool.map(prepare,[files[i:i+batch_size] for i in range(ind,end_ind,batch_size)])
