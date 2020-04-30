@@ -74,7 +74,7 @@ if __name__ == "__main__":
     pool = Pool(workers)
     for ind in tqdm(range(0, len(files) + 1, batch_size * workers)):
         end_ind = ind + batch_size * workers
-        batch_size=args.batch_size
         if end_ind > len(files) + 1:
             end_ind = len(files) + 1
         pool.map(prepare,[files[i:i+batch_size] for i in range(ind,end_ind,batch_size)])
+        #prepare(files[ind:end_ind])

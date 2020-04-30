@@ -178,9 +178,9 @@ def main():
         print(args)
         stop=False
         while not stop:
-            raw_text = 'Над желтизной правительственных зданий '#input("::")
+            raw_text = input("::")
             print(raw_text)
-            stop = True
+            stop = False
             if raw_text=='stop':
                 stop=True
             if args.model_type in ["transfo-xl", "xlnet"]:

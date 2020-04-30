@@ -21,9 +21,9 @@ class GPT2VocabTokenizer(BertTokenizer):
         cls,
         text,
         text_pair=None,
-        add_special_tokens=False,
         max_length=None,
         stride=0,
+        add_special_tokens=False,
         truncation_strategy="longest_first",
         pad_to_max_length=False,
         return_tensors=None,
@@ -35,11 +35,11 @@ class GPT2VocabTokenizer(BertTokenizer):
 
         return super().encode(text,
                         text_pair=text_pair,
-                        add_special_tokens=add_special_tokens,
                         max_length=max_length,
                         stride=stride,
                         truncation_strategy=truncation_strategy,
                         return_tensors=return_tensors,
+                        add_special_tokens=add_special_tokens,
                         # pad_to_max_length=pad_to_max_length,
                         **kwargs
                         )
@@ -58,10 +58,11 @@ class GPT2VocabTokenizer(BertTokenizer):
         return super().tokenize(text)
 if __name__ == "__main__":
 
-    tokenizer=GPT2VocabTokenizer.from_pretrained('/raid/data/nlp/models/gpt2/medium_vb/medium_vb_v1')
-    text='Привет как дела? \n Что делаешь :?'
+    tokenizer=GPT2VocabTokenizer.from_pretrained('/raid/data/nlp/models/gpt2_medium_v20/vocab.txt')
+    text=input('::')
     print(text)
-    print(tokenizer.encode(text))
+    print(tokenizer.tokenize(text))
+    print(tokenizer.build_inputs_with_special_tokens(tokenizer.encode(text)))
     print(tokenizer.decode(tokenizer.encode(text)))
     print(tokenizer.max_len_single_sentence)
     print(tokenizer.build_inputs_with_special_tokens(tokenizer.tokenize(text)))

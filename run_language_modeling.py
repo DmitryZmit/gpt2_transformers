@@ -768,7 +768,8 @@ def main():
         model = model_class(config=config)
 
     model.to(args.device)
-
+    total_params = sum([np.prod(p.size()) for p in model.parameters()])
+    print('Number of parameter = {}'.format(total_params))
     if args.local_rank == 0:
         torch.distributed.barrier()  # End of barrier to make sure only the first process in distributed training download model & vocab
 
